@@ -1,4 +1,4 @@
-from src.base_classes import Robot
+from src.mainpulator_base_classes import Robot
 import numpy as np
 
 
