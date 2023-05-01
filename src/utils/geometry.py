@@ -33,18 +33,6 @@ def get_pick_up_path_points(y, height, no_points):
     return points
 
 
-def get_angle_segments(line1, line2):
-    x1, y1, x2, y2 = line1
-    x3, y3, x4, y4 = line2
-    v1 = [x2 - x1, y2 - y1]
-    v2 = [x4 - x3, y4 - y3]
-    dot_product = np.dot(v1, v2)
-    norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
-    cosine_angle = np.clip(dot_product / norm_product, -1.0, 1.0)
-    angle = np.arccos(cosine_angle)
-    return angle
-
-
 def get_equation_of_line(line):
     x1, y1, x2, y2 = line
     m = (y2 - y1) / (x2 - x1)
@@ -77,51 +65,11 @@ def get_line_segment_intersect(line1, line2):
         return None
 
 
-def find_arc_center(p1, p2, radius):
-    # Calculate the midpoint of the line segment connecting the two endpoints
-    midpoint = (p1 + p2) / 2
-    # Calculate the normalized vector along the line segment
-    delta = p2 - p1
-    chord_length = np.linalg.norm(delta)
-    delta_normalized = delta / chord_length
-    # Calculate the normalized vector perpendicular to the line segment
-    perpendicular_normalized = np.array(
-        [-delta_normalized[1], delta_normalized[0]])
-    # Calculate the distance from the midpoint to the center of the arc
-    distance_to_center = np.sqrt(radius**2 - (chord_length / 2)**2)
-    # Find the coordinates of the center of the arc
-    center1 = midpoint + distance_to_center * perpendicular_normalized
-    center2 = midpoint - distance_to_center * perpendicular_normalized
-    return tuple(center1), tuple(center2)
+def get_angle_between_points(p1, p2):
+    return np.arctan2(p2[1] - p1[1], p2[0] - p1[0])
 
 
-def create_fillet(line1, line2, apex_offset):
-    x1, y1, x2, y2 = line1
-    x3, y3, x4, y4 = line2
-    intersection = np.array([x2, y2])
-    line1_vector = np.array([x2 - x1, y2 - y1])
-    line2_vector = np.array([x4 - x3, y4 - y3])
-    line1_unit_vector = line1_vector / np.linalg.norm(line1_vector)
-    line2_unit_vector = line2_vector / np.linalg.norm(line2_vector)
-    angle_between_lines = np.arccos(
-        np.dot(line1_unit_vector, line2_unit_vector))
-    fillet_radius = apex_offset / (1 - np.sin(angle_between_lines / 2))
-    distance_from_intersection = fillet_radius / \
-        np.tan(angle_between_lines / 2)
-    line1_end_point = intersection - line1_unit_vector*distance_from_intersection
-    line2_start_point = intersection + line2_unit_vector*distance_from_intersection
-    shortened_line1 = np.array([(x1, y1), line1_end_point])
-    shortened_line2 = np.array([line2_start_point, (x4, y4)])
-    fillet_centers = find_arc_center(
-        line1_end_point, line2_start_point, fillet_radius)
-    # find the center furthest from the intersection
-    distances_from_intersection = [get_distance_between_points(
-        intersection, center) for center in fillet_centers]
-    fillet_center = fillet_centers[np.argmax(distances_from_intersection)]
-    return shortened_line1, shortened_line2, fillet_center, fillet_radius
-
-
-def distance_between_segments(s1, s2):
+def get_distance_between_segments(s1, s2):
     def dist_point_to_line(p, a, b):
         return np.linalg.norm(np.cross(b - a, a - p)) / np.linalg.norm(b - a)
 
@@ -141,9 +89,77 @@ def distance_between_segments(s1, s2):
     )
 
 
-def get_arc_angles(center, point1, point2):
-    arc_start_angle = np.rad2deg(np.arctan2(
-        point1[1] - center[1], point1[0] - center[0]))
-    arc_end_angle = np.rad2deg(np.arctan2(
-        point2[1] - center[1], point2[0] - center[0]))
-    return arc_start_angle, arc_end_angle
+def get_angle_between_lines(line1, line2):
+    l1 = np.array(line1)
+    l2 = np.array(line2)
+    v1 = l1[1] - l1[0]
+    v2 = l2[1] - l2[0]
+    # Calculate the dot product of the two lines
+    dot_product = np.dot(v1, v2)
+    # Calculate the magnitudes of the two lines
+    mag_v1 = np.linalg.norm(v1)
+    mag_v2 = np.linalg.norm(v2)
+    # Calculate the cosine of the angle between the lines
+    cos_angle = dot_product / (mag_v1 * mag_v2)
+    # Calculate the angle in radians
+    angle_rad = np.arccos(cos_angle)
+    return angle_rad
+
+
+def get_internal_angle_between_lines(line1, line2):
+    angle_rad = get_angle_between_lines(line1, line2)
+    if angle_rad > np.pi:
+        angle_rad = 2*np.pi - angle_rad
+    return angle_rad
+
+
+def fillet_segments(line1, line2, external_distance):
+    l1 = np.array(line1)
+    l2 = np.array(line2)
+    d_theta = get_internal_angle_between_lines(l1, l2)
+    c0 = external_distance
+    r = c0 * np.sin(d_theta / 2) / (1 - np.sin(d_theta / 2))
+    cut_length = r / np.tan(d_theta / 2)
+    v1_hat = (l1[1] - l1[0]) / np.linalg.norm(l1[1] - l1[0])
+    v2_hat = (l2[1] - l2[0]) / np.linalg.norm(l2[1] - l2[0])
+    v1_perp = np.array([-v1_hat[1], v1_hat[0]])
+    v2_perp = np.array([-v2_hat[1], v2_hat[0]])
+    cut1 = l1[1] - v1_hat * cut_length
+    cut2 = l2[0] + v2_hat * cut_length
+    r_dummy = np.cross(cut2 - cut1, v2_perp) / np.cross(v1_perp, v2_perp)
+    center = cut1 + r_dummy * v1_perp
+    l1_cut = np.array([l1[0], cut1])
+    l2_cut = np.array([cut2, l2[1]])
+    return l1_cut, l2_cut, center, r
+
+
+def get_arc_angles(start_pos, end_pos, center):
+    # Convert input arrays to numpy arrays
+    start_pos = np.array(start_pos)
+    end_pos = np.array(end_pos)
+    center = np.array(center)
+
+    # Calculate vectors from center to start and end positions
+    start_vec = start_pos - center
+    end_vec = end_pos - center
+
+    start_vec_unit = start_vec / np.linalg.norm(start_vec)
+    end_vec_unit = end_vec / np.linalg.norm(end_vec)
+
+    clockwise = np.cross(start_vec, end_vec) < 0
+
+    multiplier = -1 if clockwise else 1
+
+    d_angle = np.abs(
+        np.arccos(np.dot(start_vec_unit, end_vec_unit))) * multiplier
+    d_angle = np.sign(d_angle) * (np.abs(d_angle) % (2 * np.pi))
+
+    # Calcualte angle between unit vectors and [0, 1]:
+    start_angle = np.arccos(
+        np.dot(start_vec_unit, np.array([0, 1]))) * multiplier
+    start_angle = np.sign(start_angle) * (np.abs(start_angle) % (2 * np.pi))
+
+    end_angle = d_angle + start_angle
+    end_angle = np.sign(end_angle) * (np.abs(end_angle) % (2 * np.pi))
+
+    return start_angle, end_angle, d_angle, clockwise

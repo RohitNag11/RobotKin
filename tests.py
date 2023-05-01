@@ -1,12 +1,12 @@
 import unittest
-from src.robots import HexaBot, QuadBot
+from src.robots import HexaArm, QuadArm
 from src.utils import geometry as geom
 import numpy as np
 
 
 class TestQuadBot(unittest.TestCase):
     def setUp(self):
-        self.robot = QuadBot(theta_1_init=np.pi,
+        self.robot = QuadArm(theta_1_init=np.pi,
                              theta_2_init=-np.pi/4,
                              theta_4_init=-np.pi/5,
                              d_3_init=50,

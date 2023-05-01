@@ -1,9 +1,9 @@
-from src.mainpulator_base_classes import Robot
+from src.mainpulator_base_classes import Manipulator
 import numpy as np
 
 
 # define a class that inherits from the Robot class in the utils package:
-class HexaBot(Robot):
+class HexaArm(Manipulator):
     def __init__(self,
                  theta_1_init=0,
                  theta_2_init=0,
